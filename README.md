@@ -1,4 +1,4 @@
-# McLauncher
+# DeepDive
 
 一个用 C# + WPF 写的 Minecraft Java 版启动器，只支持 Windows。
 
@@ -74,13 +74,13 @@
 ```powershell
 git clone <仓库地址>
 cd mc-launcher
-dotnet build McLauncher.sln -c Release
+dotnet build DeepDive.sln -c Release
 ```
 
 打包成单个 exe：
 
 ```powershell
-dotnet publish src/McLauncher.App/McLauncher.App.csproj `
+dotnet publish src/DeepDive.App/DeepDive.App.csproj `
   -c Release -r win-x64 --self-contained true `
   -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
   -o dist
@@ -123,8 +123,8 @@ vendor/easytier/
 
 ```
 src/
-├── McLauncher.App/     WPF 界面层（窗口、页面、视图模型）
-└── McLauncher.Core/    无 UI 依赖的核心逻辑
+├── DeepDive.App/     WPF 界面层（窗口、页面、视图模型）
+└── DeepDive.Core/    无 UI 依赖的核心逻辑
     ├── Auth/           离线 / 微软账号
     ├── Launcher/       路径、设置、崩溃分析
     ├── Modrinth/       内容搜索与下载

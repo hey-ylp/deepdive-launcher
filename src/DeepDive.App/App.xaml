@@ -1,0 +1,117 @@
+﻿<Application x:Class="DeepDive.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:conv="clr-namespace:DeepDive.App.Converters"
+             xmlns:local="clr-namespace:DeepDive.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- WPF-UI (lepoco) Win11 Fluent 主题与控件样式 -->
+                <ui:ThemesDictionary Theme="Light" />
+                <ui:ControlsDictionary />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- 转换器统一挂全局：窗口自己的 Resources 里漏定义会 XamlParseException，进程直接退 -->
+            <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+            <conv:InverseBoolConverter x:Key="InverseBool" />
+            <conv:NullToVisibilityConverter x:Key="NullToVis" />
+            <conv:IdleOnlyConverter x:Key="IdleOnly" />
+            <conv:FirstLetterConverter x:Key="FirstLetter" />
+
+            <!--
+                页面底色：比 WPF-UI 的 ApplicationBackgroundBrush（#F9F9F9）明显深一档。
+                用 #F9F9F9 的话卡片（纯白）浮不出来，整页看着还是平的。
+                接深色主题时这里要跟着换（当前 App.xaml 写死 Theme="Light"）。
+            -->
+            <SolidColorBrush x:Key="PageBackgroundBrush" Color="#E2E2E2" />
+
+            <!--
+                卡片底色：覆盖 WPF-UI 的半透明白（#B3FFFFFF）。
+                半透明白叠在浅灰页底上会混成跟底色几乎一样的颜色，卡片边界就没了 ——
+                必须是不透明白，卡片才浮得起来。同名字典键优先于 MergedDictionaries，
+                所以这一行会让全项目 9 处 DynamicResource 引用一起生效。
+            -->
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="#F4F4F4" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="#C8C8C8" />
+
+            <!--
+                分隔线 / 控件描边：WPF-UI 原值是 #0F000000（6% 黑），压在浅灰底上基本看不见。
+                标题栏下线、导航竖线、状态栏横线都用它，所以必须换成实色。
+            -->
+            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="#BEBEBE" />
+
+            <!-- 页面标题 / 小字说明：全站共用一套字号，免得每页各写各的 -->
+            <Style x:Key="PageTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="15" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <Style x:Key="CaptionStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="Opacity" Value="0.6" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <!--
+                描边按钮：透明底 + 1px 细边，hover 才浮出很浅的底色。
+                WPF-UI 默认按钮自带一层灰底，一个界面里放七八个就成了一块块灰砖；
+                参考稿里次要动作全是「白底 + 细边」，这个样式照着那个来。
+            -->
+            <Style x:Key="OutlineButton" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Height" Value="30" />
+                <Setter Property="Padding" Value="12,0" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="SnapsToDevicePixels" Value="True" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd" CornerRadius="6"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  Margin="{TemplateBinding Padding}" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background"
+                                            Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Bd" Property="Background"
+                                            Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Bd" Property="Opacity" Value="0.4" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- 日志工具条那种小一号的 -->
+            <Style x:Key="OutlineButtonSmall" TargetType="Button" BasedOn="{StaticResource OutlineButton}">
+                <Setter Property="Height" Value="22" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="Padding" Value="9,0" />
+            </Style>
+
+            <!-- 卡片：设置页 / 工具页共用的「白底 + 细描边」容器 -->
+            <Style x:Key="CardStyle" TargetType="Border">
+                <Setter Property="CornerRadius" Value="10" />
+                <Setter Property="Padding" Value="16,14" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

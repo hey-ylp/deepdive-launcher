@@ -65,7 +65,7 @@ appsettings.Local.json
 
 ## 图标候选图（AI 生成的设计稿，只留最终 .ico）
 /_icon/*
-!/_icon/McLauncher.ico
+!/_icon/DeepDive.ico
 
 ## Java 小工具的编译产物（.java 源码和 .jar 保留）
 tools/writable-fix/out/

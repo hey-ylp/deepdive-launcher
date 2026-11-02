@@ -1,0 +1,396 @@
+<ui:FluentWindow x:Class="DeepDive.App.Views.ContentBrowserWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:models="clr-namespace:DeepDive.App.Models"
+                 xmlns:vm="clr-namespace:DeepDive.App.ViewModels"
+                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                 mc:Ignorable="d"
+                 d:DataContext="{d:DesignInstance Type=vm:ContentBrowserViewModel}"
+                 Title="内容下载 · Modrinth"
+                 Width="1080" Height="700"
+                 MinWidth="860" MinHeight="540"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+        <!--
+            版本徽章：绿色 = 支持你现在选的版本，橙 = 不支持，灰 = 没法判断。
+            颜色只表达一件事——「这个能不能直接装到我正在玩的版本上」。
+        -->
+        <Style x:Key="CompatBadge" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#8A8A8A" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Compat}" Value="{x:Static models:CompatState.Compatible}">
+                    <Setter Property="Foreground" Value="#0F7B0F" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Compat}" Value="{x:Static models:CompatState.Incompatible}">
+                    <Setter Property="Foreground" Value="#C05621" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 类型标签（模组 / 整合包 / 光影包 / 资源包）：横向一排开关 -->
+        <Style x:Key="TypeTabItem" TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Padding" Value="16,8" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd"
+                                CornerRadius="6"
+                                BorderThickness="1"
+                                BorderBrush="#22000000"
+                                Background="Transparent"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#11000000" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2E4C6EF5" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#4C6EF5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="内容下载 · Modrinth" />
+
+        <!-- 类型：模组 / 整合包 / 光影包 / 资源包 -->
+        <ListBox Grid.Row="1" Margin="20,10,20,0"
+                 ItemsSource="{Binding Types}"
+                 SelectedItem="{Binding SelectedType}"
+                 ItemContainerStyle="{StaticResource TypeTabItem}"
+                 Background="Transparent" BorderThickness="0"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding DisplayName}" FontSize="14" />
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- 筛选：关键词 + 游戏版本 + 加载器 + 排序 -->
+        <Grid Grid.Row="2" Margin="20,12,20,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox Grid.Column="0" Height="34" MinWidth="180"
+                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="中文英文都能搜：「优化」「光影」「机械动力」，或者直接打 sodium。回车搜索，留空则按排序浏览">
+                <TextBox.InputBindings>
+                    <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
+                </TextBox.InputBindings>
+            </TextBox>
+
+            <ComboBox Grid.Column="1" Width="128" Height="34" Margin="8,0,0,0"
+                      ItemsSource="{Binding VersionOptions}"
+                      SelectedItem="{Binding SelectedVersion}"
+                      DisplayMemberPath="Display"
+                      ToolTip="筛这个游戏版本支持的内容。版本徽章也按它判断兼不兼容" />
+
+            <ComboBox Grid.Column="2" Width="124" Height="34" Margin="8,0,0,0"
+                      ItemsSource="{Binding LoaderOptions}"
+                      SelectedItem="{Binding SelectedLoader}"
+                      DisplayMemberPath="Display"
+                      ToolTip="选项跟着类型变：光影包只有 Iris / OptiFine / Canvas，资源包没有加载器" />
+
+            <ComboBox Grid.Column="3" Width="110" Height="34" Margin="8,0,0,0"
+                      ItemsSource="{Binding SortOptions}"
+                      SelectedItem="{Binding SelectedSort}"
+                      DisplayMemberPath="Display" />
+
+            <Button Grid.Column="4" Content="搜索" Height="34" Padding="20,0" Margin="8,0,0,0"
+                    FontWeight="SemiBold"
+                    Command="{Binding SearchCommand}" />
+
+            <Button Grid.Column="5" Content="重置" Height="34" Padding="14,0" Margin="8,0,0,0"
+                    Command="{Binding ResetFiltersCommand}"
+                    ToolTip="清空关键词、加载器和版本筛选" />
+        </Grid>
+
+        <!-- 说明行：这一类东西装到哪、当前版本兼容几条 -->
+        <Grid Grid.Row="3" Margin="20,8,20,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <TextBlock Text="{Binding TypeNote}" Opacity="0.6" FontSize="12"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="　装到：" Opacity="0.45" FontSize="12" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding InstallTarget}" Opacity="0.75" FontSize="12"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="{Binding CompatSummary}" FontSize="12"
+                           Opacity="0.7" VerticalAlignment="Center" />
+
+                <!-- 中文关键词被换成英文时，把实际检索词写出来，免得用户以为搜错了 -->
+                <TextBlock Text="{Binding QueryHint}" FontSize="11.5" Margin="12,0,0,0"
+                           Opacity="0.55" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" MaxWidth="240"
+                           ToolTip="{Binding QueryHint}" />
+
+                <CheckBox Content="中文简介" Margin="16,0,0,0" FontSize="12"
+                          VerticalAlignment="Center"
+                          IsChecked="{Binding TranslateDescriptions}"
+                          ToolTip="把英文简介翻成中文。机翻质量有限，英文原文会以小字留在下面。名字的中英对照不看这个开关，始终显示" />
+            </StackPanel>
+        </Grid>
+
+        <!-- 结果 -->
+        <Grid Grid.Row="4" Margin="20,0,20,0">
+            <ListBox ItemsSource="{Binding Results}"
+                     Background="Transparent" BorderThickness="0"
+                     HorizontalContentAlignment="Stretch"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     VirtualizingPanel.IsVirtualizing="True"
+                     VirtualizingPanel.VirtualizationMode="Recycling">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0,0,0,8" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <ContentPresenter />
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                CornerRadius="8" Padding="12,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- 没图标时的色块。WPF 解不了 Modrinth 的 webp，用首字母+主题色顶上 -->
+                                <Border Grid.Column="0" Width="42" Height="42" CornerRadius="6"
+                                        Background="{Binding AccentColor}"
+                                        VerticalAlignment="Top" Margin="0,0,12,0">
+                                    <TextBlock Text="{Binding Initial}" Foreground="White"
+                                               FontSize="19" FontWeight="Bold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+
+                                <StackPanel Grid.Column="1">
+                                    <WrapPanel>
+                                        <!--
+                                            名字按 PCL 的样子排：认得出来的通用词拼成中文放前面当大字，
+                                            认不出来（Sodium、Create 这类品牌词）就还是英文，只是小一号跟在后面。
+                                            纯品牌名不硬翻 —— 翻成「钠」「创造」比英文更难认。
+                                        -->
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                                    MaxWidth="440" ToolTip="{Binding Title}">
+                                            <TextBlock Text="{Binding TitleMain}" FontSize="15.5"
+                                                       FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding TitleSub}" FontSize="11"
+                                                       Opacity="0.42" Margin="6,0,0,2"
+                                                       VerticalAlignment="Bottom"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Visibility="{Binding HasTitleZh,
+                                                                    Converter={StaticResource BoolToVis}}" />
+                                        </StackPanel>
+                                        <Border Background="{Binding TypeColor}" CornerRadius="3"
+                                                Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding TypeLabel}" Foreground="White"
+                                                       FontSize="11" />
+                                        </Border>
+                                        <TextBlock Text="{Binding LoaderText}" Margin="8,0,0,0"
+                                                   FontSize="12" Opacity="0.75"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding VersionBadge}" Margin="8,0,0,0"
+                                                   Style="{StaticResource CompatBadge}"
+                                                   ToolTip="{Binding VersionTip}" />
+
+                                        <!--
+                                            功能分类（优化 / 装饰 / 科技…）。加载器不在这里面 ——
+                                            上面那行已经单独显示过，混进来就成了「Fabric 优化 Fabric」。
+                                            分类是封闭集合，走本地词典直翻，不耗翻译额度。
+                                        -->
+                                        <Border Background="#1F888888" CornerRadius="3"
+                                                Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                ToolTip="{Binding CategoryTip}"
+                                                Visibility="{Binding HasCategories,
+                                                             Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="{Binding CategoryText}"
+                                                       FontSize="11" Opacity="0.85" />
+                                        </Border>
+                                    </WrapPanel>
+
+                                    <!--
+                                        简介。有中文译文时正文用译文，英文原文缩成小字留在下面 ——
+                                        机翻会翻错（nether → 「地下空间」），留着原文能对照。
+                                        没有译文时就只显示英文，小字整行隐藏。
+                                    -->
+                                    <TextBlock Text="{Binding DescriptionLine}" FontSize="12.5"
+                                               Opacity="0.85" TextWrapping="Wrap"
+                                               MaxHeight="34" Margin="0,4,0,0"
+                                               TextTrimming="CharacterEllipsis" />
+
+                                    <TextBlock Text="{Binding Description}" FontSize="11"
+                                               Opacity="0.42" TextWrapping="Wrap"
+                                               MaxHeight="16" Margin="0,2,0,0"
+                                               TextTrimming="CharacterEllipsis">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasDescriptionZh}" Value="False">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <TextBlock FontSize="11" Opacity="0.5" Margin="0,4,0,0">
+                                        <Run Text="{Binding Author, Mode=OneWay}" />
+                                        <Run Text=" · 下载 " />
+                                        <Run Text="{Binding DownloadsLabel, Mode=OneWay}" />
+                                        <Run Text=" · 关注 " />
+                                        <Run Text="{Binding FollowsLabel, Mode=OneWay}" />
+                                        <Run Text=" · 更新 " />
+                                        <Run Text="{Binding UpdatedLabel, Mode=OneWay}" />
+                                    </TextBlock>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2" VerticalAlignment="Top">
+                                    <!-- 主操作：进版本选择页，挑一个直接下到 mods/shaderpacks/resourcepacks -->
+                                    <Button Content="下载" Height="30" Padding="16,0"
+                                            FontWeight="SemiBold"
+                                            Click="OnDownloadClick"
+                                            Visibility="{Binding CanDownload,
+                                                         Converter={StaticResource BoolToVis}}"
+                                            ToolTip="列出这个项目的所有版本，挑一个直接装进当前实例" />
+
+                                    <Button Content="复制链接" Height="26" Padding="10,0" Margin="0,6,0,0"
+                                            FontSize="11"
+                                            CommandParameter="{Binding}"
+                                            Command="{Binding DataContext.CopyLinkCommand,
+                                                      RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                            ToolTip="复制 Modrinth 页面链接（这台机器的系统 shell 打不开浏览器，所以不直接跳）" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- 空状态 -->
+            <TextBlock Text="没搜到。试试把版本或加载器改成「不限」，或者换个关键词。"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Opacity="0.5" FontSize="13"
+                       Visibility="{Binding ShowEmpty, Converter={StaticResource BoolToVis}}" />
+        </Grid>
+
+        <!-- 底栏 -->
+        <Grid Grid.Row="5" Margin="20,8,20,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Status}" Opacity="0.7" FontSize="12"
+                           TextTrimming="CharacterEllipsis" />
+
+                <!-- 网络重试提示：搜索接口抽风时这里会显示「N 秒后重试（第 2/3 次）」 -->
+                <TextBlock Text="{Binding NetworkHint}" Foreground="#185FA5" FontSize="11.5"
+                           TextTrimming="CharacterEllipsis" Margin="0,2,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding NetworkHint}" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Text="{Binding TranslationHint}" Opacity="0.5" FontSize="11"
+                           TextTrimming="CharacterEllipsis" Margin="0,2,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding TranslationHint}" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Text="{Binding ErrorText}" Foreground="#C02B2B" FontSize="12"
+                           TextWrapping="Wrap" Margin="0,2,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ErrorText}" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
+
+            <TextBlock Grid.Column="1" Text="{Binding PageText}" Opacity="0.55" FontSize="12"
+                       VerticalAlignment="Center" Margin="0,0,12,0" />
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button Content="上一页" Height="30" Padding="12,0"
+                        Command="{Binding PrevPageCommand}" />
+                <Button Content="下一页" Height="30" Padding="12,0" Margin="8,0,0,0"
+                        Command="{Binding NextPageCommand}" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

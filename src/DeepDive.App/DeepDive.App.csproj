@@ -1,0 +1,53 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>DeepDive.ico</ApplicationIcon>
+
+    <!-- 程序集名独立于项目名：项目叫 DeepDive.App 是为了和 Core 区分层级，
+         但用户看到的是 DeepDive.exe。以前每次 publish 完都要手动 mv 改名。 -->
+    <AssemblyName>DeepDive</AssemblyName>
+
+    <!-- 版本号：exe 属性、关于页、崩溃日志都用它 -->
+    <Version>0.2.0</Version>
+    <AssemblyVersion>0.2.0.0</AssemblyVersion>
+    <FileVersion>0.2.0.0</FileVersion>
+    <Product>DeepDive</Product>
+    <AssemblyTitle>DeepDive</AssemblyTitle>
+    <Company>DeepDive</Company>
+    <Copyright>本启动器为个人项目，与 Mojang / Microsoft 无关联</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepDive.Core\DeepDive.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    EasyTier 联机组件（LGPL-3.0）：作为独立文件随启动器分发到 exe 旁的 easytier\ 目录。
+    为什么不嵌进单文件 exe：easytier-core.exe 是独立进程，WPF 单文件只打包托管程序集，
+    原生的 exe/dll/sys 必须留在外面（ExcludeFromSingleFile=true 强制它们不内嵌）。
+    分发时附 LGPL 副本、关于页声明、允许用户替换。
+
+    用通配符而不是逐个文件列：vendor\easytier\ 不入库（34MB 第三方二进制），
+    别人克隆下来这个目录是空的。逐个列文件会让「目录不存在」直接构建失败，
+    通配符无匹配时不报错 —— 源码克隆后能正常编译，只是联机功能用不了。
+  -->
+  <ItemGroup Condition="Exists('..\..\vendor\easytier')">
+    <Content Include="..\..\vendor\easytier\*"
+             Link="easytier\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             ExcludeFromSingleFile="true" />
+  </ItemGroup>
+
+</Project>
