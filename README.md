@@ -6,6 +6,18 @@
 
 ![首页](docs/screenshots/home.png)
 
+## 关于这个项目
+
+**代码由 DeepSeek 生成**（DeepSeek-V4.1-Flash），我负责提需求、定方案、验收结果、以及在真机上踩坑排错。
+
+写在这里不是免责声明，是想让你看代码时有个预期：
+
+- 注释非常密，大部分是踩坑记录（“为什么不能这么写”），因为改的人不看就会再踩一遍
+- 结构是边做边长出来的，不是一开始设计好的，个别地方有历史包袱
+- 你说得出来的功能都真机验证过，但边界情况不一定覆盖到了
+
+发现问题欢迎提 issue，不过回不回、什么时候改，看我当时有没有空。
+
 ## 功能
 
 **游戏安装与启动**
@@ -76,22 +88,34 @@ dotnet publish src/McLauncher.App/McLauncher.App.csproj `
 
 ## 联机组件（可选）
 
-联机功能依赖 [EasyTier](https://github.com/EasyTier/EasyTier)（LGPL-3.0）。这 34 MB 二进制没有放进仓库，需要自己下：
+联机功能依赖 [EasyTier](https://github.com/EasyTier/EasyTier)（LGPL-3.0）。这 34 MB 二进制没有放进仓库，需要自己下。
 
-1. 从 [EasyTier Releases](https://github.com/EasyTier/EasyTier/releases) 下载 Windows 版
-2. 把下面这些文件放到 `vendor/easytier/`：
+1. 从 [EasyTier Releases](https://github.com/EasyTier/EasyTier/releases) 下载 **`easytier-windows-x86_64-v2.6.4.zip`**（当前适配 2.6.4，其他版本 CLI 参数可能变）
+2. 解压后把下面这些文件放到 `vendor/easytier/`：
 
 ```
 vendor/easytier/
-├── easytier-core.exe
-├── easytier-cli.exe
-├── wintun.dll
-├── Packet.dll
-├── WinDivert64.sys
-└── LICENSE-LGPL-3.0.txt
+├── easytier-core.exe      ← 压缩包里有
+├── easytier-cli.exe       ← 压缩包里有
+├── wintun.dll             ← 压缩包里有
+├── Packet.dll             ← 压缩包里有
+├── WinDivert64.sys        ← 压缩包里有
+└── LICENSE-LGPL-3.0.txt   ← 压缩包里没有，从 EasyTier 仓库根目录取
 ```
 
+压缩包里另外那两个 `easytier-web*.exe` 用不到，不用放。
+
 不放也能编译，只是联机页用不了。
+
+## 账号与隐私
+
+启动器**不向任何自建服务器上传数据**，所有状态都在本地 `instances\` 和 `launcher\` 里。
+
+**微软登录**用的是 Xbox Live 的公共应用 ID（`000000004C12AE6F`），不是私有密钥，也没有任何密钥需要配置。登录拿到的是微软官方签发的令牌，启动器只负责保存和续期。
+
+**关于「导入官方启动器账号」**：这个功能会读本机 `.minecraft\launcher_accounts.json` 或者 `cmdkey` 里存的令牌，目的是帮你省掉重新登录一次。它只在你主动点那个按钮时执行，读到的令牌只写进本地 `launcher\accounts.json`。不想要这个功能可以整块删掉，不影响其他。
+
+**注意**：`launcher\` 目录里有你的令牌和可选的 DeepSeek API Key，备份或分享文件夹时别整个发出去。这个目录已经在 `.gitignore` 里。
 
 ## 目录结构
 
