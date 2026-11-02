@@ -1,0 +1,86 @@
+## .NET / Visual Studio
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+## 构建产物
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+publish/
+*.pdb
+*.dll.config
+*.cache
+
+## NuGet
+*.nupkg
+*.snupkg
+packages/
+!packages/build/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## 测试与覆盖率
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+coverage*.info
+
+## ⚠️ 启动器运行时数据 —— 这些里面有真实凭据，任何情况下都不许入库
+## launcher/ 下有 accounts.json（微软 access/refresh token）和
+## launcher-settings.json（DeepSeek API Key）。误传一次就得全部轮换。
+/launcher/
+/instances/
+/downloads/
+/logs/
+/crash-reports/
+
+## 本地配置 / 密钥
+appsettings.Local.json
+*.secrets.json
+.env
+.env.local
+
+## 构建输出与本地临时目录
+/dist/
+/run/
+/_steptest/
+/_backup/
+
+## 第三方二进制（EasyTier 联机组件 34MB，README 里写了去哪下）
+/vendor/easytier/
+
+## 图标候选图（AI 生成的设计稿，只留最终 .ico）
+/_icon/*
+!/_icon/McLauncher.ico
+
+## Java 小工具的编译产物（.java 源码和 .jar 保留）
+tools/writable-fix/out/
+*.class
+
+## Rider / VS Code
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+## 系统
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
