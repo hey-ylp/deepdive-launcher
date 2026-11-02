@@ -2,6 +2,8 @@
 
 一个用 C# + WPF 写的 Minecraft Java 版启动器，只支持 Windows。
 
+> 作者：**hey-ylp**（需求、设计、验收） · **DeepSeek**（代码）
+
 我没打算做成 PCL / HMCL 的替代品，只是想把日常用得到的那些功能做成自己能控制的形状：安装、启动、装模组、看日志，不夹带广告和捆绑。
 
 ![首页](docs/screenshots/home.png)
