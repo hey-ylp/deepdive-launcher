@@ -592,22 +592,6 @@ public partial class ContentVersionViewModel : ObservableObject
             return;
         }
 
-        // CurseForge 的整合包清单格式和 .mrpack 不一样（manifest.json + projectID/fileID），
-        // 现有安装器只认 Modrinth 的版本号清单。包能下下来但装不对，会在建实例那步失败，
-        // 与其装半个废实例，不如当场说清楚。
-        if (_hit.Hit.Platform == ContentPlatform.CurseForge)
-        {
-            Status = "CurseForge 的整合包暂时装不了";
-            MessageBox.Show(
-                "CurseForge 的整合包用的是另一套清单格式，这个启动器还没适配。\n\n"
-                + "可以先在 CurseForge 上下载整合包文件，再用「工具 → 导入整合包」装进来。\n"
-                + "模组、光影、资源包不受影响，可以直接下。",
-                "这个整合包装不了",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            return;
-        }
-
         var suggested = SuggestInstanceName();
 
         var name = AskInstanceName?.Invoke(suggested) ?? suggested;

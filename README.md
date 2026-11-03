@@ -36,7 +36,7 @@
 - 直接搜 **Modrinth** 或 **CurseForge** 装模组、整合包、光影包、资源包，自动解析前置依赖
   - CurseForge 走 MCIM 公益镜像，不需要自己的 API key
   - CurseForge 的前置依赖按「当前游戏版本 + 加载器」自动匹配
-  - CurseForge 的整合包暂不支持自动安装（见「已知限制」）
+  - CurseForge 的整合包也能直接装（读 manifest.json，新建独立实例）
 - 导入本地整合包（`.mrpack`、CurseForge `.zip`、手动打包的懒人包）
 - 模组管理：中文名、图标、启停开关
 - 启动前模组预检：查缺前置、重复安装、加载器不匹配
@@ -150,7 +150,6 @@ src/
 
 - 只支持 Windows，WPF 的限制
 - 只接了 Modrinth 和 CurseForge，没接 FTB / ATLauncher 那些
-- **CurseForge 的整合包装不了**：它的清单格式（manifest.json）和 Modrinth 的 .mrpack 不一样，还没适配。可以先手动下载再用「工具 → 导入整合包」
 - CurseForge 完全依赖 MCIM 镜像（个人申请不到 CurseForge 的 API key，只能 Google 账号登录申请），镜像挂了这条线就断
 - 种子查询是从存档文件反解，不是查在线地图，所以只能查自己去过的地方
 - 界面只有浅色

@@ -548,10 +548,6 @@ public sealed class ModpackInstaller : IDisposable
     {
         var result = new List<ModpackFile>(refs.Count);
 
-        // 同一个项目可能被引用多次（少见），查一次就够
-        var projectCache = new Dictionary<int, Dictionary<int, CurseForgeProjectFile>?>();
-        var cacheLock = new object();
-
         var done = 0;
 
         await Parallel.ForEachAsync(
@@ -561,44 +557,20 @@ public sealed class ModpackInstaller : IDisposable
             {
                 try
                 {
-                    Dictionary<int, CurseForgeProjectFile>? projectFiles;
+                    var file = await FetchFileAsync(fileRef.ProjectId, fileRef.FileId, token).ConfigureAwait(false);
 
-                    lock (cacheLock)
+                    if (file is null)
                     {
-                        if (projectCache.TryGetValue(fileRef.ProjectId, out var cached))
-                            projectFiles = cached;
-                        else
-                            projectFiles = null;
-                    }
-
-                    if (projectFiles is null)
-                    {
-                        projectFiles = await FetchProjectFilesAsync(fileRef.ProjectId, token).ConfigureAwait(false);
-
-                        lock (cacheLock)
-                            projectCache[fileRef.ProjectId] = projectFiles;
-                    }
-
-                    if (projectFiles is null)
-                    {
-                        lock (warnings) warnings.Add($"项目 {fileRef.ProjectId} 查不到文件列表（可能被作者删除或隐藏）");
-                        return;
-                    }
-
-                    if (!projectFiles.TryGetValue(fileRef.FileId, out var file))
-                    {
-                        // 很常见：cfwidget 只给最近二三十个文件，整合包用的是老的
                         lock (warnings) warnings.Add(
-                            $"项目 {fileRef.ProjectId} 的文件 {fileRef.FileId} 不在最近列表里，跳过");
+                            $"项目 {fileRef.ProjectId} 的文件 {fileRef.FileId} 查不到（项目可能被删或文件被隐藏）");
                         return;
                     }
 
-                    // Forge CDN 的直链规律：fileID 拆成「前段/后 3 位」。
-                    // 文件名必须整体转义：CDN 把裸 + 当成空格处理，含 + 的名字（如
-                    // sodium-neoforge-0.6.13+mc1.21.4.jar）不转义会直接 403。
-                    // 实测：+ 保留 → 403，%2B → 200。
+                    // MCIM 的文件路径规则：fileID 拆成「商 / 余数补足三位」。
+                    // 文件名必须整体转义：CDN 把裸 + 当空格，含 + 的名字（sodium-0.6.13+mc1.21.4.jar）
+                    // 不转义会 403。实测 + 保留 → 403，%2B → 200。
                     var escapedName = Uri.EscapeDataString(file.FileName);
-                    var url = $"https://mediafilez.forgecdn.net/files/{fileRef.FileId / 1000}/{fileRef.FileId % 1000}/"
+                    var url = $"https://mod.mcimirror.top/files/{fileRef.FileId / 1000}/{fileRef.FileId % 1000:D3}/"
                               + escapedName;
 
                     lock (result)
@@ -608,7 +580,7 @@ public sealed class ModpackInstaller : IDisposable
                             // CurseForge 的模组一律放 mods/，路径信息 manifest 里根本没有
                             Path = "mods/" + file.FileName,
                             Downloads = new List<string> { url },
-                            Hashes = new ModrinthHashes(),   // cfwidget 不给哈希，靠大小判断
+                            Hashes = new ModrinthHashes(),   // 镜像不返回哈希，靠大小判断
                             FileSize = file.FileSize,
                             Env = new ModpackEnv(),
                         });
@@ -634,18 +606,30 @@ public sealed class ModpackInstaller : IDisposable
         if (result.Count < refs.Count)
         {
             var missing = refs.Count - result.Count;
-            warnings.Add($"{missing} 个模组没查到文件信息（多半是 cfwidget 只保留最近文件），可以从 modlist.html 里手动补");
+            warnings.Add($"{missing} 个模组没查到文件信息，缺失的会列在下面");
         }
 
         return result;
     }
 
-    /// <summary>查一个项目的文件列表（fileID → 文件名 + 大小）。失败返回 null。</summary>
-    private async Task<Dictionary<int, CurseForgeProjectFile>?> FetchProjectFilesAsync(
-        int projectId, CancellationToken cancellationToken)
+    /// <summary>
+    /// 用 MCIM 镜像精确查一个文件的文件名和大小。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>换掉了之前的 cfwidget 方案</b>。cfwidget 只返回项目最近二三十个文件，
+    /// 整合包一旦用的是半年前的老版本，条目直接查不到 —— 实测一个 200 模组的包会漏掉几十个。
+    /// </para>
+    /// <para>
+    /// MCIM 的 <c>/v1/mods/{项目}/files/{文件}</c> 是<b>按 ID 精确查</b>，不限新旧，
+    /// 返回完整的 fileName 和 fileLength，正好补上这个洞。
+    /// </para>
+    /// </remarks>
+    private async Task<CurseForgeProjectFile?> FetchFileAsync(
+        int projectId, int fileId, CancellationToken cancellationToken)
     {
         using var response = await _http
-            .GetAsync($"https://api.cfwidget.com/{projectId}", cancellationToken)
+            .GetAsync($"https://mod.mcimirror.top/curseforge/v1/mods/{projectId}/files/{fileId}", cancellationToken)
             .ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode) return null;
@@ -654,28 +638,18 @@ public sealed class ModpackInstaller : IDisposable
 
         using var doc = JsonDocument.Parse(json);
 
-        if (!doc.RootElement.TryGetProperty("files", out var files) || files.ValueKind != JsonValueKind.Array)
+        if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
             return null;
 
-        var map = new Dictionary<int, CurseForgeProjectFile>();
+        var name = data.TryGetProperty("fileName", out var nameNode) ? nameNode.GetString() : null;
+        if (string.IsNullOrWhiteSpace(name)) return null;
 
-        foreach (var file in files.EnumerateArray())
-        {
-            if (!file.TryGetProperty("id", out var idNode)) continue;
-            if (!file.TryGetProperty("name", out var nameNode)) continue;
+        var size = data.TryGetProperty("fileLength", out var sizeNode) ? sizeNode.GetInt64() : 0;
 
-            var name = nameNode.GetString();
-            if (string.IsNullOrWhiteSpace(name)) continue;
-
-            var size = file.TryGetProperty("filesize", out var sizeNode) ? sizeNode.GetInt64() : 0;
-
-            map[idNode.GetInt32()] = new CurseForgeProjectFile(name, size);
-        }
-
-        return map;
+        return new CurseForgeProjectFile(name!, size);
     }
 
-    /// <summary>cfwidget 给的单个文件信息。</summary>
+    /// <summary>镜像返回的单个文件信息。</summary>
     private sealed record CurseForgeProjectFile(string FileName, long FileSize);
 
     /// <summary>读 CurseForge 的 <c>manifest.json</c>。</summary>
