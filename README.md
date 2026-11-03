@@ -6,6 +6,8 @@
 
 我没打算做成 PCL / HMCL 的替代品，只是想把日常用得到的那些功能做成自己能控制的形状：安装、启动、装模组、看日志，不夹带广告和捆绑。
 
+**直接用：** [下载最新版（GitHub Releases）](https://github.com/hey-ylp/deepdive-launcher/releases/latest) — 解压后双击 `DeepDive.exe`，不用装 .NET。想看代码或自己编译，往下翻。
+
 ![首页](docs/screenshots/home.png)
 
 ## 关于这个项目
