@@ -35,7 +35,7 @@ public sealed class CurseForgeClient
     /// <summary>Minecraft 在 CurseForge 的 gameId，固定值。</summary>
     public const int MinecraftGameId = 432;
 
-    private const string UserAgent = "DeepDive/0.2.0 (Minecraft launcher; local build)";
+    private const string UserAgent = "DeepDive/0.3.0 (Minecraft launcher; local build)";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

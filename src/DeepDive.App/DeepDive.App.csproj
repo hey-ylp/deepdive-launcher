@@ -13,9 +13,9 @@
     <AssemblyName>DeepDive</AssemblyName>
 
     <!-- 版本号：exe 属性、关于页、崩溃日志都用它 -->
-    <Version>0.2.0</Version>
-    <AssemblyVersion>0.2.0.0</AssemblyVersion>
-    <FileVersion>0.2.0.0</FileVersion>
+    <Version>0.3.0</Version>
+    <AssemblyVersion>0.3.0.0</AssemblyVersion>
+    <FileVersion>0.3.0.0</FileVersion>
     <Product>DeepDive</Product>
     <AssemblyTitle>DeepDive</AssemblyTitle>
     <Company>DeepDive</Company>
