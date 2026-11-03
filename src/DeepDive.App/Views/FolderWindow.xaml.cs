@@ -332,10 +332,42 @@ public partial class FolderWindow : FluentWindow
         }
     }
 
-    private void OnItemDoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        if (FileList.SelectedItem is not FsEntry entry) return;
+    // ── 打开条目 ────────────────────────────────────────
 
+    /// <summary>
+    /// 双击某一行。事件来自行容器（见 XAML 里 RowStyle 的 EventSetter），
+    /// 所以 <c>sender</c> 就是那一行，不用再看 ListBox 的 SelectedItem。
+    /// </summary>
+    private void OnRowDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not ListBoxItem { DataContext: FsEntry entry }) return;
+
+        e.Handled = true;
+        OpenEntry(entry);
+    }
+
+    /// <summary>键盘：回车 = 打开选中项，退格 = 上一层。</summary>
+    private void OnFileListKeyDown(object sender, KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.Enter when FileList.SelectedItem is FsEntry entry:
+                e.Handled = true;
+                OpenEntry(entry);
+                break;
+
+            case Key.Back:
+                e.Handled = true;
+                var parent = Directory.GetParent(_currentPath);
+                if (parent is not null) Navigate(parent.FullName);
+                else StatusText.Text = "已经到顶了";
+                break;
+        }
+    }
+
+    /// <summary>文件夹就进去，文件就交给系统。</summary>
+    private void OpenEntry(FsEntry entry)
+    {
         if (entry.IsDirectory)
         {
             _lastShellError = string.Empty;

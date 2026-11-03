@@ -2732,23 +2732,31 @@ public partial class MainViewModel : ObservableObject
     /// 那会打开一个游戏根本不读的目录，模组放进去不生效。
     /// </remarks>
     [RelayCommand(CanExecute = nameof(CanOpenVersionFolder))]
-    private Task OpenGameFolderAsync(GameFolderKind kind)
+    private async Task OpenGameFolderAsync(GameFolderKind kind)
     {
         var entry = SelectedVersion;
-        if (entry is null) return Task.CompletedTask;
+        if (entry is null) return;
 
         try
         {
             var target = _folders.Resolve(entry.Name, kind);
 
-            // 直接开内置窗口，不再先试系统 shell。
-            // 理由：这台机器 shell 坏了，调 ShellExecute / Shell.Application.Explore
-            // 都会先给我一个「Windows 无法访问指定设备、路径或文件」的系统弹框，
-            // 用户点一次被弹一次，体验比开不出窗口还差。要看系统窗口，菜单里有单独一项。
             AppendLog(target.Existed
                 ? $"打开{target.Label}：{target.Path}"
                 : $"打开{target.Label}：{target.Path}（原来没有，刚新建的，现在是空的）");
-            Status = $"已打开{target.Label}";
+
+            // 先请系统资源管理器 —— 有地址栏、右键菜单、能拖拽，这才是用户说的「文件夹」。
+            // 打不开才退回内置窗口（本机新起 explorer.exe 进程会 0xc0000142，只能走 COM，
+            // COM 也顶不住的时候就得自己画一个，不能让人点了没反应）。
+            Status = $"正在打开{target.Label}…";
+            if (await Task.Run(() => TryOpenInExplorerQuietly(target.Path, target.Label)).ConfigureAwait(true))
+            {
+                Status = $"已用资源管理器打开{target.Label}";
+                return;
+            }
+
+            AppendLog($"资源管理器打不开{target.Label}，改用内置窗口");
+            Status = $"已打开{target.Label}（内置窗口）";
             ShowFolderWindow(target.Path, target.Label);
         }
         catch (Exception ex)
@@ -2759,8 +2767,6 @@ public partial class MainViewModel : ObservableObject
                 AppendLog($"[错误] 内层原因：{inner.GetType().Name}: {inner.Message}");
             MessageBox.Show(ex.Message, "打不开文件夹", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
-
-        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -2820,29 +2826,71 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>打开当前实例目录 —— 这个实例的 <c>versions</c>、模组、存档都在这。</summary>
     [RelayCommand]
-    private Task OpenInstanceFolderAsync()
+    private async Task OpenInstanceFolderAsync()
     {
         var root = _folders.InstanceRoot;
         var name = SelectedInstance?.Name ?? Path.GetFileName(root.TrimEnd(Path.DirectorySeparatorChar));
 
         AppendLog($"打开实例目录（{name}）：{root}");
-        Status = $"已打开实例「{name}」目录";
-        ShowFolderWindow(root, $"实例：{name}");
 
-        return Task.CompletedTask;
+        Status = "正在打开实例目录…";
+        if (await Task.Run(() => TryOpenInExplorerQuietly(root, "实例目录")).ConfigureAwait(true))
+        {
+            Status = $"已用资源管理器打开实例「{name}」目录";
+            return;
+        }
+
+        AppendLog("资源管理器打不开实例目录，改用内置窗口");
+        Status = $"已打开实例「{name}」目录（内置窗口）";
+        ShowFolderWindow(root, $"实例：{name}");
     }
 
     /// <summary>打开共用库目录 —— 多个实例共用的 <c>libraries</c> / <c>assets</c> / <c>runtime</c> 在这。</summary>
     [RelayCommand]
-    private Task OpenSharedLibraryFolderAsync()
+    private async Task OpenSharedLibraryFolderAsync()
     {
         var root = _launcher.LibraryRoot;
 
         AppendLog($"打开共用库目录：{root}");
-        Status = "已打开共用库目录";
-        ShowFolderWindow(root, "共用库（libraries / assets / runtime）");
 
-        return Task.CompletedTask;
+        Status = "正在打开共用库目录…";
+        if (await Task.Run(() => TryOpenInExplorerQuietly(root, "共用库目录")).ConfigureAwait(true))
+        {
+            Status = "已用资源管理器打开共用库目录";
+            return;
+        }
+
+        AppendLog("资源管理器打不开共用库目录，改用内置窗口");
+        Status = "已打开共用库目录（内置窗口）";
+        ShowFolderWindow(root, "共用库（libraries / assets / runtime）");
+    }
+
+    /// <summary>
+    /// 试着用系统资源管理器打开一个目录。
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> 表示窗口开出来了（或者确认不了，按开了算 —— 不能再叠一个内置窗口上去）；
+    /// <c>false</c> 表示两条通道都失败，调用方该退回内置窗口。
+    /// </returns>
+    /// <remarks>
+    /// <b>绝不弹框</b>：这是「先试一下」的路径，失败就当没发生，日志里留一句就够了。
+    /// 每次最多阻塞三秒（两条通道各等 1.5 秒），所以调用方必须放到后台线程跑，
+    /// 不然点一下按钮界面就冻住。
+    /// </remarks>
+    private bool TryOpenInExplorerQuietly(string path, string label)
+    {
+        try
+        {
+            var result = OpenInExplorer(path);
+            AppendLog($"资源管理器已打开{label}：{path}（通道 {result.Channel}" +
+                      $"{(result.Verified ? "，窗口已确认" : "，窗口未确认")}）");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"资源管理器打不开{label}：{ex.Message}");
+            return false;
+        }
     }
 
     // ─────────────────────── 模组管理 ───────────────────────
