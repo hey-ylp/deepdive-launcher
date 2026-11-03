@@ -235,10 +235,31 @@
                             </Grid.ColumnDefinitions>
 
                             <TextBlock Grid.Column="0" Text="API Key" Style="{StaticResource FieldLabel}" />
-                            <ui:TextBox Grid.Column="1" Height="30" FontSize="12"
-                                        PlaceholderText="sk-...（在 platform.deepseek.com 申请）"
-                                        Text="{Binding DeepSeekApiKey, UpdateSourceTrigger=LostFocus}"
-                                        ToolTip="只写在本机 instances\launcher-settings.json，不会上传到别处" />
+
+                            <!-- 默认打码，右侧小眼睛点一下看明文。
+                                 不用 WPF-UI 的 PasswordBox：它那个 Password 依赖属性实测灌不进
+                                 视图模型的值，界面永远显示占位符，看着像 key 丢了。 -->
+                            <Grid Grid.Column="1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <ui:TextBox Grid.Column="0" Height="30" FontSize="12"
+                                            Text="{Binding ApiKeyDisplay, UpdateSourceTrigger=LostFocus}"
+                                            IsReadOnly="{Binding IsApiKeyEditable, Converter={StaticResource InverseBool}}"
+                                            PlaceholderText="sk-...（在 platform.deepseek.com 申请）"
+                                            ToolTip="只写在本机 instances\launcher-settings.json，不会上传到别处。点右侧眼睛可以看明文并编辑" />
+
+                                <Button Grid.Column="1" Height="30" Width="34" Margin="6,0,0,0"
+                                        Padding="0"
+                                        Command="{Binding ToggleApiKeyVisibilityCommand}"
+                                        ToolTip="显示 / 隐藏 API Key">
+                                    <TextBlock Text="{Binding ApiKeyEyeGlyph}"
+                                               FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Button>
+                            </Grid>
                         </Grid>
 
                         <TextBlock Style="{StaticResource FieldHint}"

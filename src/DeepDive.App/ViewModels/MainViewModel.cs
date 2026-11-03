@@ -4021,7 +4021,66 @@ public partial class MainViewModel : ObservableObject
     private string _localizeStatus = "点「扫描模组」列出当前版本里能翻的 jar";
 
     partial void OnDeepSeekApiKeyChanged(string value)
-        => LauncherSettings.SaveDeepSeekApiKey(_launcher.InstanceRoot, value);
+    {
+        LauncherSettings.SaveDeepSeekApiKey(_launcher.InstanceRoot, value);
+
+        // 界面绑的是 ApiKeyDisplay，key 变了得让它重算一次（否则启动时读到值也不显示）
+        OnPropertyChanged(nameof(ApiKeyDisplay));
+    }
+
+    /// <summary>
+    /// API Key 输入框当前显示的内容。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>为什么不用 PasswordBox</b>：WPF-UI 那个自带睁眼按钮的控件，<c>Password</c>
+    /// 虽然声明成了依赖属性，但实测把视图模型里的值灌不进去 —— 界面永远显示占位符，
+    /// 看着像「key 丢了」。与其和它的内部同步逻辑较劲，不如一个普通 TextBox 自己管。
+    /// </para>
+    /// <para>
+    /// <b>打码时不显示真实长度</b>：固定 12 个圆点。真按长度画，等于把 key 的长度
+    /// 告诉旁边看屏幕的人。
+    /// </para>
+    /// <para>
+    /// <b>打码时输入框是只读的</b>（<see cref="IsApiKeyEditable"/>），防止用户在掩码
+    /// 状态下敲字，把一串圆点写进配置。
+    /// </para>
+    /// </remarks>
+    public string ApiKeyDisplay
+    {
+        get => IsApiKeyVisible
+            ? DeepSeekApiKey
+            : (string.IsNullOrEmpty(DeepSeekApiKey) ? string.Empty : "sk-" + new string('•', 12));
+        set
+        {
+            // 只读态下编辑器仍可能推送旧值回来，这里挡一道
+            if (!IsApiKeyVisible) return;
+            if (value == DeepSeekApiKey) return;
+
+            DeepSeekApiKey = value;
+        }
+    }
+
+    /// <summary>API Key 是否显示明文。</summary>
+    [ObservableProperty]
+    private bool _isApiKeyVisible;
+
+    /// <summary>打码时禁止编辑，避免把圆点写进配置。</summary>
+    public bool IsApiKeyEditable => IsApiKeyVisible;
+
+    /// <summary>睁眼按钮上的图标（Segoe MDL2）：睁眼 = 点了看明文，闭眼 = 点了打码。</summary>
+    public string ApiKeyEyeGlyph => IsApiKeyVisible ? "\uED1A" : "\uE7B3";
+
+    partial void OnIsApiKeyVisibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ApiKeyDisplay));
+        OnPropertyChanged(nameof(IsApiKeyEditable));
+        OnPropertyChanged(nameof(ApiKeyEyeGlyph));
+    }
+
+    /// <summary>点小眼睛：明文 / 打码切换。</summary>
+    [RelayCommand]
+    private void ToggleApiKeyVisibility() => IsApiKeyVisible = !IsApiKeyVisible;
 
     partial void OnAiModelNameChanged(string value)
         => LauncherSettings.SaveAiModel(_launcher.InstanceRoot, value);
