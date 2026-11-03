@@ -84,9 +84,17 @@ public partial class ContentVersionViewModel : ObservableObject
                 Hashes = new ModrinthHashes { Sha1 = entry.Sha1 },
             },
         },
-        // CurseForge 的依赖只有 modId，没有版本和加载器信息，在这里没法自动装。
-        // 留空 = 下载器不会去追依赖，靠用户自己补前置（会体现在安装摘要里）。
-        Dependencies = Array.Empty<ModrinthDependency>(),
+        // CurseForge 的依赖只有 modId（没有版本号）。这里原样带进 ProjectId，
+        // 由 InstallAsync 的 resolveProject 回调按「当前游戏版本 + 加载器」查一个文件出来。
+        Dependencies = entry.Dependencies
+            .Where(d => !string.IsNullOrWhiteSpace(d.ProjectId))
+            .Select(d => new ModrinthDependency
+            {
+                ProjectId = d.ProjectId,
+                VersionId = null,
+                DependencyType = d.Type,
+            })
+            .ToList(),
     };
 
     private List<ModrinthVersion> _all = new();
@@ -423,6 +431,48 @@ public partial class ContentVersionViewModel : ObservableObject
         ? "—"
         : ContentTypeInfo.LoaderLabel(InstanceLoader);
 
+    /// <summary>
+    /// 把「只有 modId 的依赖」解析成当前实例能用的文件。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// CurseForge 的依赖永远不带版本号，只有 <c>modId</c>。这里拿它去查该项目的文件列表，
+    /// 用<b>当前实例的游戏版本 + 加载器</b>过滤，取第一个。
+    /// </para>
+    /// <para>
+    /// <b>非 CurseForge 平台直接返回 null</b> —— 安装器收到 null 会退回
+    /// 「提示手动装」的老行为，不会误伤 Modrinth 那条本来就不缺版本号的路径。
+    /// </para>
+    /// <para>
+    /// 出错一律吞掉返回 null：依赖查不到不该让整个安装失败，
+    /// 主文件装好才是要紧事，缺的前置会出现在安装摘要的警告里。
+    /// </para>
+    /// </remarks>
+    private async Task<ModrinthVersion?> ResolveProjectDependencyAsync(
+        string projectId, CancellationToken cancellationToken)
+    {
+        if (_hit.Hit.Platform != ContentPlatform.CurseForge) return null;
+
+        try
+        {
+            var cf = new CurseForgeClient();
+            var files = await cf
+                .GetFilesAsync(projectId, _baseMcVersion, InstanceLoader, cancellationToken)
+                .ConfigureAwait(false);
+
+            var first = files.FirstOrDefault(f => !string.IsNullOrWhiteSpace(f.FileName));
+            return first is null ? null : ToModrinthShapedVersion(first);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     // ── 下载 ─────────────────────────────────────────────
 
     [RelayCommand(CanExecute = nameof(CanDownload))]
@@ -480,7 +530,7 @@ public partial class ContentVersionViewModel : ObservableObject
         try
         {
             var result = await _installer
-                .InstallAsync(row.Latest, TargetFolder, reporter, cts.Token)
+                .InstallAsync(row.Latest, TargetFolder, reporter, cts.Token, ResolveProjectDependencyAsync)
                 .ConfigureAwait(true);
 
             row.MarkDone(result.AnythingInstalled
@@ -491,14 +541,6 @@ public partial class ContentVersionViewModel : ObservableObject
             ErrorText = result.Warnings.Count == 0
                 ? string.Empty
                 : string.Join("；", result.Warnings);
-
-            // CurseForge 的依赖拿不到版本号（只有 modId），装不了前置。
-            // 不说一句的话，用户少装一个库文件，游戏崩了根本想不到是这个原因。
-            if (_hit.Hit.Platform == ContentPlatform.CurseForge && ErrorText.Length == 0)
-            {
-                ErrorText = "提示：CurseForge 这边不会自动装前置依赖，"
-                            + "装完起不来的话，去项目页看看它要求哪些前置。";
-            }
 
             ProgressText = $"已完成 → {result.Folder}";
             Progress = 1;

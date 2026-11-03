@@ -90,18 +90,28 @@ public sealed class ContentInstaller : IDisposable
     /// <param name="targetFolder">目标目录（mods / shaderpacks / resourcepacks）。不存在会建。</param>
     /// <param name="progress">进度回调，<b>可能在后台线程调用</b>。</param>
     /// <param name="cancellationToken">用户取消就停。</param>
+    /// <param name="resolveProject">
+    /// 可选：把「只有项目 ID、没有版本 ID」的依赖解析成一个具体版本。
+    /// </param>
+    /// <remarks>
+    /// <b><paramref name="resolveProject"/> 是给 CurseForge 用的</b>：它的依赖只给
+    /// <c>modId</c>，永远没有版本号，而 Modrinth 的依赖基本都带版本号。
+    /// 不传这个回调时，这类依赖退化成「提示用户手动装」—— 和以前一样。
+    /// </remarks>
     public async Task<ContentInstallResult> InstallAsync(
         ModrinthVersion version,
         string targetFolder,
         IProgress<ContentDownloadProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<string, CancellationToken, Task<ModrinthVersion?>>? resolveProject = null)
     {
         var plan = new List<ModrinthVersionFile>();
         var warnings = new List<string>();
         var visited = new HashSet<string>(StringComparer.Ordinal);
 
         // 先把「要下哪些文件」算出来，这样进度条才知道分母
-        await CollectAsync(version, plan, warnings, visited, progress, cancellationToken, depth: 0)
+        await CollectAsync(version, plan, warnings, visited, progress, cancellationToken, depth: 0,
+                resolveProject)
             .ConfigureAwait(false);
 
         var installed = new List<string>();
@@ -139,7 +149,8 @@ public sealed class ContentInstaller : IDisposable
         HashSet<string> visited,
         IProgress<ContentDownloadProgress>? progress,
         CancellationToken cancellationToken,
-        int depth)
+        int depth,
+        Func<string, CancellationToken, Task<ModrinthVersion?>>? resolveProject = null)
     {
         if (!visited.Add(version.Id)) return;
 
@@ -166,9 +177,38 @@ public sealed class ContentInstaller : IDisposable
 
             if (string.IsNullOrWhiteSpace(dependency.VersionId))
             {
-                // 只给了项目 ID：得按游戏版本和加载器自己去挑一个，这事留给下一步。
-                // 现在至少要说出来，不能静悄悄当没看见。
-                warnings.Add("有一个必需依赖只标了项目、没锁定版本，需要手动装");
+                // 只给了项目 ID：Modrinth 偶尔这样，CurseForge <b>永远</b>这样。
+                // 有解析回调就自己去挑一个合适的文件，没有就只能提示手动装。
+                if (resolveProject is null || string.IsNullOrWhiteSpace(dependency.ProjectId))
+                {
+                    warnings.Add("有一个必需依赖只标了项目、没锁定版本，需要手动装");
+                    continue;
+                }
+
+                try
+                {
+                    var resolved = await resolveProject(dependency.ProjectId, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    if (resolved is null)
+                    {
+                        warnings.Add($"依赖 {dependency.ProjectId}：没有适配当前游戏版本和加载器的文件");
+                        continue;
+                    }
+
+                    await CollectAsync(resolved, plan, warnings, visited, progress, cancellationToken,
+                            depth + 1, resolveProject)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    warnings.Add($"依赖 {dependency.ProjectId} 解析失败：{ex.Message}");
+                }
+
                 continue;
             }
 
@@ -185,7 +225,7 @@ public sealed class ContentInstaller : IDisposable
                 }
 
                 await CollectAsync(dependencyVersion, plan, warnings, visited, progress, cancellationToken,
-                        depth + 1)
+                        depth + 1, resolveProject)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
