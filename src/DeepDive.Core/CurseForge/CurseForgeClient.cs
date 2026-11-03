@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DeepDive.Core.Content;
@@ -143,6 +144,45 @@ public sealed class CurseForgeClient
         var envelope = JsonSerializer.Deserialize<CfEnvelope<List<CfFile>>>(json, JsonOptions);
 
         return (envelope?.Data ?? new List<CfFile>()).Select(ToVersion).ToList();
+    }
+
+    /// <summary>
+    /// 批量取项目名（<c>modId → 名字</c>）。
+    /// </summary>
+    /// <remarks>
+    /// 用在「带几个前置」的悬停提示上。用 <c>POST /v1/mods</c> 一次查完，
+    /// 不要逐个查 —— 一屏十来个依赖串行发请求要等十几秒。
+    /// 失败返回空字典，调用方按「显示原 ID」兜底。
+    /// </remarks>
+    public async Task<IReadOnlyDictionary<string, string>> GetProjectNamesAsync(
+        IReadOnlyList<string> projectIds, CancellationToken cancellationToken = default)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var ids = projectIds
+            .Where(id => long.TryParse(id, out _))
+            .Select(long.Parse)
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0) return result;
+
+        var body = JsonSerializer.Serialize(new { modIds = ids });
+        using var content = new StringContent(body, Encoding.UTF8, "application/json");
+
+        using var response = await _http
+            .PostAsync($"{MirrorBaseUrl}/v1/mods", content, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode) return result;
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var envelope = JsonSerializer.Deserialize<CfEnvelope<List<CfMod>>>(json, JsonOptions);
+
+        foreach (var mod in envelope?.Data ?? new List<CfMod>())
+            result[mod.Id.ToString()] = mod.Name;
+
+        return result;
     }
 
     /// <summary>

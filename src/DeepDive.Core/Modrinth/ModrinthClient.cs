@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DeepDive.Core.Modrinth;
 
@@ -222,6 +223,56 @@ public sealed class ModrinthClient : IDisposable
             rank[ordered[i].Version] = i;
 
         return rank;
+    }
+
+    /// <summary>
+    /// 批量取项目标题（<c>projectId → 标题</c>）。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 用在「这个模组带几个前置」的悬停提示上：依赖里只有 <c>project_id</c>，
+    /// 直接显示一串 ID 用户看不懂。
+    /// </para>
+    /// <para>
+    /// 一次请求查完，不要每个依赖发一次 —— 版本窗口一屏十来行，串行查要十几秒。
+    /// 查不到的 ID 不进字典，调用方按「还是显示 ID」兜底。
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyDictionary<string, string>> GetProjectTitlesAsync(
+        IReadOnlyList<string> projectIds, CancellationToken cancellationToken = default)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (projectIds.Count == 0) return result;
+
+        // Modrinth 的 ids 参数要求 JSON 数组字面量，不是逗号分隔
+        var ids = "[" + string.Join(",", projectIds.Distinct().Select(id => $"\"{id}\"")) + "]";
+        var url = $"{BaseUrl}/projects?ids={Uri.EscapeDataString(ids)}";
+
+        var json = await GetStringAsync(url, "批量读取项目名", cancellationToken).ConfigureAwait(false);
+
+        var projects = JsonSerializer.Deserialize<List<ModrinthProjectBrief>>(
+            json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        foreach (var project in projects ?? new List<ModrinthProjectBrief>())
+        {
+            if (string.IsNullOrWhiteSpace(project.Id)) continue;
+            result[project.Id] = string.IsNullOrWhiteSpace(project.Title) ? project.Slug : project.Title;
+        }
+
+        return result;
+    }
+
+    /// <summary><c>/projects</c> 返回的精简结构（只要名字，不要描述那些）。</summary>
+    private sealed class ModrinthProjectBrief
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; init; } = string.Empty;
+
+        [JsonPropertyName("title")]
+        public string Title { get; init; } = string.Empty;
+
+        [JsonPropertyName("slug")]
+        public string Slug { get; init; } = string.Empty;
     }
 
     /// <summary>GET 一个 URL，带限流与网络抖动重试，返回响应正文。</summary>

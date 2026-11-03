@@ -59,6 +59,11 @@ public sealed partial class VersionTargetRow : ObservableObject
 
         RequiredDependencies = Latest.Dependencies
             .Count(d => string.Equals(d.DependencyType, "required", StringComparison.OrdinalIgnoreCase));
+
+        // 先摆 ID，名字等视图模型批量查到再改。没有前置就留空，ToolTip 也不挂。
+        DependencyDetail = RequiredDependencies == 0
+            ? string.Empty
+            : "前置：" + string.Join("、", RequiredDependencyIds);
     }
 
     /// <summary>加载器原名。</summary>
@@ -149,6 +154,25 @@ public sealed partial class VersionTargetRow : ObservableObject
         1 => "带 1 个前置",
         _ => $"带 {RequiredDependencies} 个前置",
     };
+
+    /// <summary>
+    /// 悬停时显示的前置清单。**先给 ID，名字是异步补的**。
+    /// </summary>
+    /// <remarks>
+    /// 版本窗口一屏十几行，同步查名字会把界面卡住；所以先把 <c>project_id</c> 摆上去，
+    /// 批量查到名字再由视图模型改写这个属性。查不到就一直显示 ID —— 有总比没有强。
+    /// </remarks>
+    [ObservableProperty]
+    private string _dependencyDetail = string.Empty;
+
+    /// <summary>必需前置的项目 ID（去重，供视图模型批量查名字）。</summary>
+    public IReadOnlyList<string> RequiredDependencyIds => Latest.Dependencies
+        .Where(d => string.Equals(d.DependencyType, "required", StringComparison.OrdinalIgnoreCase))
+        .Select(d => d.ProjectId)
+        .Where(id => !string.IsNullOrWhiteSpace(id))
+        .Select(id => id!)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
 
     /// <summary>要下的文件：优先 <c>primary</c>。</summary>
     public ModrinthVersionFile? PrimaryFile =>

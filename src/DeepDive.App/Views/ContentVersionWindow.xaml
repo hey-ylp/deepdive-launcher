@@ -162,7 +162,9 @@
                                         <Border Background="#1F888888" CornerRadius="3"
                                                 Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center"
                                                 Visibility="{Binding HasDependencies,
-                                                             Converter={StaticResource BoolToVis}}">
+                                                             Converter={StaticResource BoolToVis}}"
+                                                ToolTip="{Binding DependencyDetail}"
+                                                ToolTipService.ShowDuration="20000">
                                             <TextBlock Text="{Binding DependencyText}" FontSize="10.5"
                                                        Opacity="0.85" />
                                         </Border>

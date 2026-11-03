@@ -410,6 +410,9 @@ public partial class ContentVersionViewModel : ObservableObject
         foreach (var row in rows)
             Targets.Add(row);
 
+        // 前置的项目名异步补 —— 阻塞在这儿会让切游戏版本标签卡一下
+        _ = FillDependencyNamesAsync(rows);
+
         var matched = rows.Count(r => r.IsInstanceMatch);
         Status = rows.Count == 0
             ? $"这个项目没有支持 {selected} 的文件"
@@ -425,6 +428,57 @@ public partial class ContentVersionViewModel : ObservableObject
 
         OnPropertyChanged(nameof(ShowEmpty));
         DownloadCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// 批量把前置的项目 ID 换成名字，写进每行的悬停提示。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 一次请求查完全部 ID，不是每个依赖发一次 —— 一屏十来行，串行查要等十几秒。
+    /// </para>
+    /// <para>
+    /// 整段吞异常：查不到名字就保持显示 ID，这纯粹是提示，绝不该影响能不能装。
+    /// </para>
+    /// </remarks>
+    private async Task FillDependencyNamesAsync(IReadOnlyList<VersionTargetRow> rows)
+    {
+        var ids = rows
+            .SelectMany(r => r.RequiredDependencyIds)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (ids.Count == 0) return;
+
+        try
+        {
+            IReadOnlyDictionary<string, string> names;
+
+            if (_hit.Hit.Platform == ContentPlatform.CurseForge)
+            {
+                var cf = new CurseForgeClient();
+                names = await cf.GetProjectNamesAsync(ids).ConfigureAwait(true);
+            }
+            else
+            {
+                names = await _client.GetProjectTitlesAsync(ids).ConfigureAwait(true);
+            }
+
+            if (names.Count == 0) return;
+
+            foreach (var row in rows)
+            {
+                var own = row.RequiredDependencyIds;
+                if (own.Count == 0) continue;
+
+                row.DependencyDetail = "前置：" + string.Join("、",
+                    own.Select(id => names.TryGetValue(id, out var name) ? name : id));
+            }
+        }
+        catch
+        {
+            // 保持 ID 显示，不影响任何功能
+        }
     }
 
     private string LoaderName => string.IsNullOrWhiteSpace(InstanceLoader)
