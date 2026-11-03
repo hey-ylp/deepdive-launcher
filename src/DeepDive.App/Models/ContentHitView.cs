@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
+using DeepDive.Core.Content;
 using DeepDive.Core.Modrinth;
 using DeepDive.Core.Translation;
 
@@ -53,7 +54,7 @@ public sealed class ContentHitView : INotifyPropertyChanged
     };
 
     public ContentHitView(
-        ModrinthSearchHit hit,
+        ContentProject hit,
         ContentTypeInfo typeInfo,
         string? currentGameVersion,
         IReadOnlyDictionary<string, int> versionRank)
@@ -66,7 +67,7 @@ public sealed class ContentHitView : INotifyPropertyChanged
         Author = hit.Author;
         Description = hit.Description;
         Slug = hit.Slug;
-        ProjectId = hit.ProjectId;
+        ProjectId = hit.Id;
 
         TypeLabel = typeInfo.DisplayName;
         TypeColor = TypeColors.TryGetValue(typeInfo.Type, out var color) ? color : "#4C6EF5";
@@ -175,7 +176,7 @@ public sealed class ContentHitView : INotifyPropertyChanged
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-    public ModrinthSearchHit Hit { get; }
+    public ContentProject Hit { get; }
 
     public ContentTypeInfo TypeInfo { get; }
 
@@ -269,7 +270,7 @@ public sealed class ContentHitView : INotifyPropertyChanged
     /// <c>[fabric, neoforge, optimization, quilt]</c>，其中 optimization 是功能分类。
     /// 所以拿当前类型的加载器白名单取交集，再映射成显示名。
     /// </remarks>
-    private static IReadOnlyList<string> PickLoaders(ModrinthSearchHit hit, ContentTypeInfo typeInfo)
+    private static IReadOnlyList<string> PickLoaders(ContentProject hit, ContentTypeInfo typeInfo)
     {
         var allowed = typeInfo.Loaders;
         var result = new List<string>();

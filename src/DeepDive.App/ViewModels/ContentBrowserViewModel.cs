@@ -5,6 +5,8 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeepDive.App.Models;
+using DeepDive.Core.Content;
+using DeepDive.Core.CurseForge;
 using DeepDive.Core.Launcher;
 using DeepDive.Core.Modrinth;
 using DeepDive.Core.Translation;
@@ -19,6 +21,23 @@ public sealed record VersionOption(string Value, string Display);
 
 /// <summary>排序下拉的一项。</summary>
 public sealed record SortOption(string Value, string Display);
+
+/// <summary>
+/// 内容平台。
+/// </summary>
+/// <remarks>
+/// CurseForge 全部走 MCIM 镜像（<c>mod.mcimirror.top/curseforge</c>），
+/// 用它自己的 API key —— 个人拿不到 CurseForge 的 key（只能 Google 账号登录申请）。
+/// 代价是镜像挂了就没了，所以保留 Modrinth 作为默认。
+/// </remarks>
+public sealed record PlatformOption(ContentPlatform Platform, string Display)
+{
+    public static IReadOnlyList<PlatformOption> All { get; } = new[]
+    {
+        new PlatformOption(ContentPlatform.Modrinth, "Modrinth"),
+        new PlatformOption(ContentPlatform.CurseForge, "CurseForge"),
+    };
+}
 
 /// <summary>
 /// 内容下载窗口的视图模型：按类型 / 游戏版本 / 加载器搜 Modrinth。
@@ -43,6 +62,15 @@ public partial class ContentBrowserViewModel : ObservableObject
     private const string AnyVersion = "";
 
     private readonly ModrinthClient _client;
+
+    /// <summary>
+    /// CurseForge 客户端。
+    /// </summary>
+    /// <remarks>
+    /// 没走 DI 单例：它没有「当前源」这种可变状态（永远指向 MCIM 镜像），
+    /// 一个窗口一个实例不会有任何冲突。走 DI 反而要改窗口的构造调用链。
+    /// </remarks>
+    private readonly CurseForgeClient _cf = new();
     private readonly GameFolderService _folders;
     private readonly TranslationService _translator;
     private readonly Dispatcher _dispatcher;
@@ -161,6 +189,24 @@ public partial class ContentBrowserViewModel : ObservableObject
     public ObservableCollection<VersionOption> VersionOptions { get; }
 
     public ObservableCollection<SortOption> SortOptions { get; }
+
+    /// <summary>可选的平台。</summary>
+    public ObservableCollection<PlatformOption> Platforms { get; } = new(PlatformOption.All);
+
+    /// <summary>当前平台。切换会重搜一次。</summary>
+    [ObservableProperty]
+    private PlatformOption _selectedPlatform = PlatformOption.All[0];
+
+    /// <summary>切平台：清空列表重搜，别让 Modrinth 的结果挂着 CurseForge 的标签。</summary>
+    partial void OnSelectedPlatformChanged(PlatformOption value)
+    {
+        if (_suppress || value is null) return;
+
+        Results.Clear();
+        Offset = 0;
+        TotalHits = 0;
+        _ = RunSearchAsync(0);
+    }
 
     public ObservableCollection<ContentHitView> Results { get; } = new();
 
@@ -644,21 +690,42 @@ public partial class ContentBrowserViewModel : ObservableObject
                 SortBy = SelectedSort?.Value ?? "relevance",
             };
 
-            Log($"搜索：关键词「{query.Query}」类型 {query.Type} 版本 {query.GameVersion ?? "不限"} "
-                + $"加载器 {query.Loader ?? "不限"} 偏移 {query.Offset}");
+            Log($"搜索：平台 {SelectedPlatform.Display} 关键词「{query.Query}」类型 {query.Type} "
+                + $"版本 {query.GameVersion ?? "不限"} 加载器 {query.Loader ?? "不限"} 偏移 {query.Offset}");
             var watch = System.Diagnostics.Stopwatch.StartNew();
 
-            var result = await _client.SearchAsync(query, cts.Token).ConfigureAwait(true);
+            // 两个平台的返回结构完全不同，在这里收敛成同一个通用模型，
+            // 下游（ContentHitView / 图标 / 翻译 / 版本窗口）就不用知道数据从哪来
+            IReadOnlyList<ContentProject> projects;
+            int totalHits;
+
+            if (SelectedPlatform.Platform == ContentPlatform.CurseForge)
+            {
+                var (items, total) = await _cf.SearchAsync(
+                    query.Query, query.Type, query.GameVersion, query.Loader,
+                    query.Offset, query.Limit, query.SortBy, cts.Token).ConfigureAwait(true);
+
+                projects = items;
+                totalHits = (int)Math.Min(total, int.MaxValue);
+            }
+            else
+            {
+                var result = await _client.SearchAsync(query, cts.Token).ConfigureAwait(true);
+
+                projects = result.Hits.Select(h => h.ToProject()).ToList();
+                totalHits = result.TotalHits;
+            }
+
             if (cts.IsCancellationRequested) return;
 
             watch.Stop();
 
-            Offset = result.Offset;
-            TotalHits = result.TotalHits;
+            Offset = offset;
+            TotalHits = totalHits;
 
             Results.Clear();
-            foreach (var hit in result.Hits)
-                Results.Add(new ContentHitView(hit, SelectedType, query.GameVersion, _rank));
+            foreach (var project in projects)
+                Results.Add(new ContentHitView(project, SelectedType, query.GameVersion, _rank));
 
             // 图标异步补：列表先用首字母色块显示，图片下完再换。
             // 翻译有独立的取消令牌，图标就复用同一个搜索令牌 —— 翻页/换搜索时一起掐掉，
@@ -673,7 +740,7 @@ public partial class ContentBrowserViewModel : ObservableObject
                 ? "没有匹配的内容"
                 : $"{SelectedType.DisplayName}：这一页 {Results.Count} 条";
 
-            Log($"搜索完成：{result.TotalHits} 条，本页 {Results.Count}，用时 {watch.ElapsedMilliseconds} ms");
+            Log($"搜索完成：{totalHits} 条，本页 {Results.Count}，用时 {watch.ElapsedMilliseconds} ms");
 
             OnPropertyChanged(nameof(PageText));
             OnPropertyChanged(nameof(ShowEmpty));

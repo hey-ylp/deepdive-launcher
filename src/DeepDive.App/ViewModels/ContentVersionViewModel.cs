@@ -5,6 +5,8 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeepDive.App.Models;
+using DeepDive.Core.Content;
+using DeepDive.Core.CurseForge;
 using DeepDive.Core.Launcher;
 using DeepDive.Core.Modrinth;
 
@@ -44,6 +46,48 @@ public partial class ContentVersionViewModel : ObservableObject
 
     private CancellationTokenSource? _loadCts;
     private CancellationTokenSource? _downloadCts;
+
+    /// <summary>
+    /// 把一个 CurseForge 文件包装成 <see cref="ModrinthVersion"/>。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>为什么这样做而不是重构成通用模型</b>：版本窗口下游（兼容判断、目标行、
+    /// <see cref="ContentInstaller"/>）全都吃 <see cref="ModrinthVersion"/>，
+    /// 改一遍要动四五个类，回归风险远大于收益。包一层，这些代码一行不动。
+    /// </para>
+    /// <para>
+    /// <b>下载地址是重拼过的</b>：CurseForge API 给的 <c>downloadUrl</c> 实测 404，
+    /// 必须用 MCIM 的 <c>/files/</c> 地址，这一步在 <see cref="CurseForgeClient.GetFilesAsync"/>
+    /// 里已经做好了。
+    /// </para>
+    /// </remarks>
+    private static ModrinthVersion ToModrinthShapedVersion(ContentVersionEntry entry) => new()
+    {
+        Id = entry.Id,
+        ProjectId = entry.ProjectId,
+        Name = entry.Name,
+        VersionNumber = string.IsNullOrWhiteSpace(entry.VersionNumber) ? entry.Name : entry.VersionNumber,
+        VersionType = entry.ReleaseType,
+        GameVersions = entry.GameVersions,
+        Loaders = entry.Loaders,
+        DatePublished = entry.DatePublished,
+        Downloads = (int)Math.Min(entry.Downloads, int.MaxValue),
+        Files = new[]
+        {
+            new ModrinthVersionFile
+            {
+                Url = entry.DownloadUrl,
+                FileName = entry.FileName,
+                Primary = true,
+                Size = entry.Size,
+                Hashes = new ModrinthHashes { Sha1 = entry.Sha1 },
+            },
+        },
+        // CurseForge 的依赖只有 modId，没有版本和加载器信息，在这里没法自动装。
+        // 留空 = 下载器不会去追依赖，靠用户自己补前置（会体现在安装摘要里）。
+        Dependencies = Array.Empty<ModrinthDependency>(),
+    };
 
     private List<ModrinthVersion> _all = new();
     private Dictionary<string, int> _rank = new(StringComparer.OrdinalIgnoreCase);
@@ -183,9 +227,28 @@ public partial class ContentVersionViewModel : ObservableObject
 
         try
         {
-            _all = (await _client.GetProjectVersionsAsync(_hit.ProjectId, cts.Token).ConfigureAwait(true))
-                .Where(v => v.Files.Count > 0)
-                .ToList();
+            if (_hit.Hit.Platform == ContentPlatform.CurseForge)
+            {
+                // CurseForge 的文件转成 Modrinth 的形状再往下走。
+                // 不是为了骗人，是为了让「版本过滤 / 兼容判断 / 下载器」这三块逻辑
+                // 一行都不用改 —— 它们只认字段，不认来源。
+                // ⚠️ 依赖是这个适配的盲区：CurseForge 的 dependency 只给 modId，
+                // 没有 versionId，Modrinth 客户端查不到，所以这里一律留空（下载会提示）。
+                var cf = new CurseForgeClient();
+                var files = await cf.GetFilesAsync(_hit.ProjectId, _baseMcVersion, null, cts.Token)
+                    .ConfigureAwait(true);
+
+                _all = files
+                    .Where(f => !string.IsNullOrWhiteSpace(f.FileName))
+                    .Select(ToModrinthShapedVersion)
+                    .ToList();
+            }
+            else
+            {
+                _all = (await _client.GetProjectVersionsAsync(_hit.ProjectId, cts.Token).ConfigureAwait(true))
+                    .Where(v => v.Files.Count > 0)
+                    .ToList();
+            }
 
             if (cts.IsCancellationRequested) return;
 
@@ -429,6 +492,14 @@ public partial class ContentVersionViewModel : ObservableObject
                 ? string.Empty
                 : string.Join("；", result.Warnings);
 
+            // CurseForge 的依赖拿不到版本号（只有 modId），装不了前置。
+            // 不说一句的话，用户少装一个库文件，游戏崩了根本想不到是这个原因。
+            if (_hit.Hit.Platform == ContentPlatform.CurseForge && ErrorText.Length == 0)
+            {
+                ErrorText = "提示：CurseForge 这边不会自动装前置依赖，"
+                            + "装完起不来的话，去项目页看看它要求哪些前置。";
+            }
+
             ProgressText = $"已完成 → {result.Folder}";
             Progress = 1;
             IsProgressIndeterminate = false;
@@ -476,6 +547,22 @@ public partial class ContentVersionViewModel : ObservableObject
         if (_modpackInstaller is null)
         {
             Status = "整合包安装组件没准备好";
+            return;
+        }
+
+        // CurseForge 的整合包清单格式和 .mrpack 不一样（manifest.json + projectID/fileID），
+        // 现有安装器只认 Modrinth 的版本号清单。包能下下来但装不对，会在建实例那步失败，
+        // 与其装半个废实例，不如当场说清楚。
+        if (_hit.Hit.Platform == ContentPlatform.CurseForge)
+        {
+            Status = "CurseForge 的整合包暂时装不了";
+            MessageBox.Show(
+                "CurseForge 的整合包用的是另一套清单格式，这个启动器还没适配。\n\n"
+                + "可以先在 CurseForge 上下载整合包文件，再用「工具 → 导入整合包」装进来。\n"
+                + "模组、光影、资源包不受影响，可以直接下。",
+                "这个整合包装不了",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
             return;
         }
 
